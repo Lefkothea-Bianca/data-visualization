@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta content="width=device-width, initial-scale=1.0" name="viewport">
+    <title>Bianca Website</title>
+
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Roboto:300,300i,400,400i,500,500i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Playfair+Display:400,400i,500,500i,600,600i,700,700i,900,900i" rel="stylesheet">
+
+    <link href="assets/library/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="assets/library/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
+    <link href="assets/css/style.css" rel="stylesheet">
+    <script src="http://d3js.org/d3.v6.min.js"></script>
+    <script src="https://unpkg.com/d3-v6-tip@1.0.6/build/d3-v6-tip.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/bumbeishvili/d3-tip-for-v6@4/d3-tip.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+Pro&display=swap" rel="stylesheet">
+</head>
+
+<body>
+<header id="header" class="fixed-top d-flex align-items-center">
+    <div class="container d-flex align-items-center justify-content-between">
+        <h1 class="logo"><a href="index.html">Bianca</a></h1>
+        <nav id="navbar" class="navbar">
+            <ul>
+                <li><a class="nav-link active" href="index.html">Vaccinations per Manufacturer</a></li>
+                <li><a class="nav-link" href="credits.html">Credits</a></li>
+            </ul>
+            <i class="bi bi-list mobile-nav-toggle"></i>
+        </nav>
+    </div>
+</header>
+
+<div id="visualize">
+    <div class="container">
+        <nav>
+            <ol class="breadcrumb">
+                <li itemprop="itemListElement">
+                    <a itemprop="item" href="index.html">
+                        <span itemprop="name">Vaccinations per month per manufacturer</span>
+                    </a>
+                    <meta itemprop="position" content="1" />
+                </li>
+            </ol>
+        </nav>
+    </div>
+    <div class="container">
+        <div class="row justify-content-between">
+            <div class="position-relative">
+                <div id="canvas"></div>
+                <script>
+                    var manufacturers = [
+                        { label: "Pfizer/BioNTech", identifier: "total_vaccinations_pfizer", color: '#b3e2cd' },
+                        { label: "Moderna", identifier: "total_vaccinations_moderna", color: '#fdcdac' },
+                        { label: "Oxford/AstraZeneca", identifier: "total_vaccinations_astra", color: '#cbd5e8' },
+                        { label: "Johnson&Johnson", identifier: "total_vaccinations_johnson", color: '#f4cae4' },
+                        { label: "Sinovac", identifier: "total_vaccinations_sinovac", color: '#e6f5c9' }
+                    ];
+
+                    <!-- Margins - Paddings -->
+                    var margin = {top: 40, right: 200, bottom: 80, left: 50},
+                        width = 960 - margin.left - margin.right, height = 550 - margin.top - margin.bottom;
+
+                    <!-- Axis Setup -->
+                    var x = d3.scaleBand().rangeRound([0, width]).padding(0.1);
+                    var y = d3.scaleLinear().range([height, 0]);
+                    var xAxis = d3.axisBottom(x);
+                    var yAxis = d3.axisLeft(y).ticks(20).tickFormat(d3.formatPrefix(".1", 1e6));
+
+                    <!-- Tip Setup -->
+                    const formater =  d3.format(',d');
+                    var tip = d3.tip()
+                        .attr('id', 'd3-tip')
+                        .offset([-10, 0])
+                        .html(function(d) {
+                            var data = d.target.__data__.data;
+                            var subgroupName = d3.select(this.parentNode).datum().key;
+
+                            var html = "<div class='tooltipHeader'><strong>" + data.date + " Vaccinations</strong></div>";
+                            manufacturers.forEach(manufacturer => {
+                                if (data[manufacturer.identifier] != 0) {
+                                    if (subgroupName == manufacturer.identifier){
+                                        html+="<div style='color: "+manufacturer.color+"'>";
+                                    }
+                                    else {
+                                        html+="<div>";
+                                    }
+                                    html+="<strong>" + manufacturer.label +":</strong> "+ formater(data[manufacturer.identifier]) + "</div>";
+                                }
+                            });
+                            html+="<hr></hr><div><strong>Total:</strong> " + formater(data.total_vaccinations) + "</div>";
+                            return html;
+                        });
+
+                    <!-- Svg Setup -->
+                    var svg = d3.select("#canvas").append("svg")
+                        .attr("width", width + margin.left + margin.right)
+                        .attr("height", height + margin.top + margin.bottom)
+                        .append("g")
+                        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+                    svg.call(tip);
+
+                    <!-- Read File -->
+                    d3.csv("country_vaccinations_by_manufacturer.csv").then(function(data) {
+
+                        var nested_data = d3.group(data, d => d.date.split('-').slice(0, 2).join('-')).entries();
+
+                        var bar_chart_data = [];
+                        var index = 0;
+                        for (const element of nested_data) {
+
+                            var pfizerPrev = bar_chart_data.length == 0 ? 0 : bar_chart_data[index-1].total_vaccinations_pfizer;
+                            var sinovacPrev = bar_chart_data.length == 0 ? 0 : bar_chart_data[index-1].total_vaccinations_sinovac;
+                            var astraPrev = bar_chart_data.length == 0 ? 0 : bar_chart_data[index-1].total_vaccinations_astra;
+                            var johnsonPrev = bar_chart_data.length == 0 ? 0 : bar_chart_data[index-1].total_vaccinations_johnson;
+                            var modernaPrev = bar_chart_data.length == 0 ? 0 : bar_chart_data[index-1].total_vaccinations_moderna;
+
+                            var pfizer = getTotal(element[1].filter(d => d.vaccine == "Pfizer/BioNTech")) - pfizerPrev;
+                            var sinovac = getTotal(element[1].filter(d => d.vaccine == "Sinovac")) - sinovacPrev;
+                            var astra = getTotal(element[1].filter(d => d.vaccine == "Oxford/AstraZeneca")) - astraPrev;
+                            var johnson = getTotal(element[1].filter(d => d.vaccine == "Johnson&Johnson")) - johnsonPrev;
+                            var moderna = getTotal(element[1].filter(d => d.vaccine == "Moderna")) - modernaPrev;
+
+                            bar_chart_data.push(
+                                {
+                                    date: element[0],
+                                    total_vaccinations: pfizer + sinovac + astra +johnson + moderna,
+                                    total_vaccinations_pfizer: pfizer,
+                                    total_vaccinations_sinovac: sinovac,
+                                    total_vaccinations_astra: astra,
+                                    total_vaccinations_johnson: johnson,
+                                    total_vaccinations_moderna: moderna
+                                }
+                            );
+                            index++;
+                        }
+
+                        <!-- Set Domains -->
+                        x.domain(bar_chart_data.map(function(d) { return d.date; }));
+                        y.domain([0, d3.max(bar_chart_data, function(d) { return d.total_vaccinations; })]);
+
+                        var color = d3.scaleOrdinal()
+                            .domain(manufacturers.map(d=>d.identifier))
+                            .range(manufacturers.map(d=>d.color));
+
+                        var stackedData = d3.stack()
+                            .keys(manufacturers.map(d=>d.identifier))
+                            (bar_chart_data);
+
+                        <!-- Svg Manipulate -->
+                        svg.append("g")
+                            .attr("class", "x axis")
+                            .attr("transform", "translate(0," + height + ")")
+                            .call(xAxis);
+
+                        svg.append("g")
+                            .attr("class", "y axis")
+                            .call(yAxis);
+
+                        svg.append("text")
+                            .attr("transform", "rotate(-90)")
+                            .attr("y", 6)
+                            .attr("dy", ".71em")
+                            .style("text-anchor", "end")
+                            .text("Vaccinations Per Month");
+
+                        var cx = 740;
+                        var cy = 0;
+                        // Handmade legend
+                        for (var i = 0; i < manufacturers.length; i ++) {
+                            svg.append("circle").attr("cx", cx).attr("cy",cy).attr("r", 6).style("fill", manufacturers[i].color)
+                            svg.append("text").attr("x", cx+20).attr("y", cy).text(manufacturers[i].label).style("font-size", "15px").attr("alignment-baseline","middle")
+                            cy+=30;
+                        }
+
+                        // Show the bars
+                        svg.append("g")
+                            .selectAll("g")
+                            // Enter in the stack data.csv = loop key per key = group per group
+                            .data(stackedData)
+                            .enter().append("g")
+                            .attr("fill", function(d) { return color(d.key); })
+                            .selectAll("rect")
+                            // enter a second time = loop subgroup per subgroup to add all rectangles
+                            .data(function(d) { return d; })
+                            .enter().append("rect")
+                            .attr("x", function(d) { return x(d.data.date); })
+                            .attr("y", function(d) { return y(d[1]); })
+                            .attr("height", function(d) { return y(d[0]) - y(d[1]); })
+                            .attr("width",x.bandwidth())
+                            .attr("stroke", "grey")
+                            .on('mouseover', tip.show)
+                            .on('mouseout', tip.hide)
+                    });
+
+                    function getTotal(elements) {
+                        var total = 0;
+                        var nested_data_by_location = d3.group(elements, d => d.location).entries();
+                        for (const elementByLocation of nested_data_by_location) {
+                            total+=parseInt(elementByLocation[1][elementByLocation[1].length - 1].total_vaccinations);
+                        }
+                        return total;
+                    }
+
+                </script>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="footer" class="text-center">
+    <div class="container">
+        <ul class="list-inline">
+            <li class="list-inline-item"><a href="index.html">Vaccinations per manufacturer</a></li>
+            <li class="list-inline-item"><a href="credits.html">Credits</a></li>
+        </ul>
+        <div class="socials-media text-center">
+            <ul class="list-unstyled">
+                <li><a target="_blank" href="https://www.facebook.com/bianca.kts"><i class="bi bi-facebook"></i></a></li>
+                <li><a target="_blank" href="https://www.instagram.com/ktsbianca/"><i class="bi bi-instagram"></i></a></li>
+                <li><a target="_blank" href="https://www.linkedin.com/in/lefkothea-bianca-katsina-21bb29208/"><i class="bi bi-linkedin"></i></a></li>
+            </ul>
+        </div>
+
+        <p>&copy; Copyrights Bianca. All rights reserved.</p>
+        <div class="credits">
+            Designed by Bianca
+        </div>
+    </div>
+</div>
+<a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+<script src="assets/library/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="assets/library/typed.js/typed.min.js"></script>
+<script src="assets/js/main.js"></script>
+</body>
+</html>
